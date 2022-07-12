@@ -1,1 +1,4 @@
 __pycache__/
+results/
+results_no_positional/
+results_resources/
