@@ -53,7 +53,7 @@ net = d2l.EncoderDecoder(encoder, decoder)
 
 losses = train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epochs, device, dataset + "_fold_" + str(i))
 
-predictions = batched_beam_decode(net, test_iter, num_steps, beam_width, num_activities+2, device, dataset + "_fold_" + str(i))
+predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, dataset + "_fold_" + str(i))
 
 result = pd.DataFrame(columns=['epoch','loss'])
 for epoch, loss in losses:

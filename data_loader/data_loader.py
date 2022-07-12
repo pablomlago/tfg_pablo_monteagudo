@@ -79,11 +79,20 @@ def __load_dataset_dict_simple_fold(dataset):
         print('Not known dataset')
         exit()
 
-    return {
+    """return {
         "case_id_col": "CaseID",
         "activity_col": "ActivityID",
         "timestamp_col": "CompleteTimestamp",
         "resource_col": "Resource",
+        "max_length_trace": max_length_trace,
+        "eventlog": eventlog
+    }"""
+
+    return {
+        "case_id_col": "caseid",
+        "activity_col": "task",
+        "timestamp_col": "end_timestamp",
+        "resource_col": "user",
         "max_length_trace": max_length_trace,
         "eventlog": eventlog
     }
@@ -298,7 +307,8 @@ def __load_dataset_time_resource_log(filename, timestamp_col, case_id_col, activ
 
 def __load_dataset_time_log(filename, timestamp_col, case_id_col, activity_col):
     #Format of the datetime
-    format_timestamp = '%Y-%m-%d %H:%M:%S'
+    #format_timestamp = '%Y-%m-%d %H:%M:%S'
+    format_timestamp = '%Y-%m-%dT%H:%M:%S.%f'
     #We cant do log(0)
     epsilon = 0.001
     #We load the dataset
