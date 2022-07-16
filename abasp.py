@@ -16,13 +16,15 @@ parser.add_argument("--execution_id", type=str, required=True)
 parser.add_argument("--num_epochs", type=int, required=True)
 parser.add_argument("--num_folds", type=int, required=True)
 parser.add_argument("--fold_num", type=int, required=True)
-parser.add_argument("--train", type=bool, required=True)
+parser.add_argument("--train", type=bool, required=False, default=True)
+parser.add_argument("--beam", type=bool, required=False, default=True)
 
 args = parser.parse_args()
 dataset = args.dataset
 execution_id = args.execution_id
 num_epochs = args.num_epochs
 train_required = args.train
+beam_enabled = args.beam
 beam_width = 5
 num_folds = 5 if args.num_folds is None else args.num_folds
 
@@ -60,8 +62,10 @@ if train_required:
         result = result.append({'epoch': epoch, 'loss': loss[0]}, ignore_index=True)
     result.to_csv(execution_name+'_fold_'+str(i)+'_losses.csv', index=False)
 
-predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, dataset + "_fold_" + str(i))
-#predictions = predict_seq2seq(net, test_iter, num_steps, device, dataset + "_fold_" + str(i))
+if beam_enabled:
+    predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, dataset + "_fold_" + str(i))
+else:
+    predictions = predict_seq2seq(net, test_iter, num_steps, device, dataset + "_fold_" + str(i))
 
 
 result = pd.DataFrame(columns=['prediction','truth','similarity'])
