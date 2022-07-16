@@ -188,3 +188,26 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
             batch_pred.append(current_pred+[eot_token]*(num_steps-len(current_pred)))
         preds.append(torch.Tensor(batch_pred).to(torch.int))
     return preds
+
+def predict_seq2seq(net, data_iter, num_steps,
+                    device, name, save_attention_weights=False):
+    """Predict for sequence to sequence."""
+    # We load the best model parameters
+    net.load_state_dict(torch.load(name + '_best-model-parameters.pt'))
+    # Set `net` to eval mode for inference
+    net.eval()
+    #We get predictions for each batch
+    preds = []
+    for batch in data_iter:
+        enc_X, enc_valid_len, _, _ = [x.to(device) for x in batch]
+        #We get the outputs of the encoder
+        enc_outputs = net.encoder(enc_X, enc_valid_len)
+        dec_state = net.decoder.init_state(enc_outputs, enc_valid_len)
+        #We prepare the first output for the decoder
+        dec_X = enc_X[:,-1,0].reshape(-1,1).expand(-1,num_steps+1).detach().clone()
+        #We iterate over the steps in the decoder
+        for i in range(num_steps):
+            Y, dec_state = net.decoder(dec_X[:,:num_steps], dec_state)
+            dec_X[:,i+1] = Y.argmax(dim=2)[:,i]
+        preds.append(dec_X[:,1:].to(torch.int).cpu())
+    return preds

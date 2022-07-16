@@ -49,7 +49,7 @@ test_iter = DataLoader(test_dataset_fold[i], batch_size)
 #                        dropout)
 encoder = Seq2SeqEncoderResourceNoPositional(num_activities+3, num_resources+3, embed_size, num_hiddens, time_features, num_layers,
                         dropout)
-decoder = Seq2SeqAttentionDecoderPositional(num_activities+3, embed_size, num_hiddens, num_layers,
+decoder = Seq2SeqDecoder(num_activities+3, embed_size, num_hiddens, num_layers,
                         dropout)
 net = d2l.EncoderDecoder(encoder, decoder)
 

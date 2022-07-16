@@ -4,7 +4,7 @@ import pandas as pd
 import shutil
 
 
-results_folder = "./results_no_positional/"
+results_folder = "./debugged/results/"
 
 final_data = []
 for file in os.listdir(results_folder):
