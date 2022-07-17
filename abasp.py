@@ -82,7 +82,6 @@ if train_required:
     else:
         result.to_csv(execution_name+'_fold_'+str(i)+'_losses.csv', index=False)
 
-print("Testing...")
 
 # If no postprocessing is enabled ABASP exits
 if postprocessing_type is None:
@@ -114,6 +113,7 @@ if args.optimize_beam_width:
         print("Best beam width: " + str(beam_width))
 
 
+print("Testing...")
 if "beam" in postprocessing_type:
     predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
 else:
