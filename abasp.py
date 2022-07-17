@@ -26,6 +26,7 @@ parser.add_argument("--train", action="store_true")
 # With choices we can select the type of postprocessing technique to apply
 parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_monteagudo", "argmax", "random"])
 parser.add_argument("--disable_attention", required=False, action="store_true")
+parser.add_argument("--optimize_beam_width", required=False, action="store_true")
 
 args = parser.parse_args()
 dataset = args.dataset
@@ -90,6 +91,29 @@ if postprocessing_type is None:
 # If we do not train, we need to move the model to the gpu, otherwise we won't be able to load de weights properly
 device = d2l.try_gpu()
 net.to(device)
+
+if args.optimize_beam_width:
+    optimization_results = {}
+    beam_width_to_try = [15, 10, 3, 5, 7, 10]
+    if "beam" in postprocessing_type:
+        for i in beam_width_to_try:
+            print("Optimizing beam width: " + str(i))
+            if num_activities + 2 < i:
+                print("Beam width " + str(i) + " too high, skipping")
+                continue
+            curr_beam_width = i
+            predictions = batched_beam_decode_optimized(net, val_iter, num_steps, curr_beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
+            val_result = pd.DataFrame(columns=['prediction', 'truth', 'similarity'])
+            for ((_,_,Y_ground_truth,_), predictions_batch) in zip(val_iter, predictions):
+                for pred_trace, ground_truth_trace in zip(predictions_batch.tolist(), Y_ground_truth.tolist()):
+                    l1, l2, similarity = levenshtein_similarity(pred_trace, ground_truth_trace, num_activities+2)
+                    result = val_result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
+            avg_val_dl = val_result['similarity'].mean()
+            optimization_results[curr_beam_width] = avg_val_dl
+        beam_width = max(optimization_results, key=optimization_results.get)
+        print("Best beam width: " + str(beam_width))
+
+
 if "beam" in postprocessing_type:
     predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
 else:

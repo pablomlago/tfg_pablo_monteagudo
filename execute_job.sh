@@ -9,10 +9,24 @@ while [[ "$#" -gt 0 ]]; do case $1 in
     -d|--dataset) dataset="$2"; shift; shift ;;
     -e|--execution_id) execution_id="$2"; shift; shift ;;
     -n|--fold_num) fold_num="$2"; shift; shift ;;
+    -p|--postprocessing) postprocessing="$2"; shift; shift ;;
+    -a|--disable_attention) disable_attention="$1";  shift ;;
+    -o|--optimize_beam_width) optimize_beam_width="$1"; shift ;;
+    -t|--train) train="$1"; shift ;;
     *) echo "Unknown parameter: $1"; exit 1 ;;
   esac
 done
 
-
-$PYTHON abasp.py --dataset $dataset --execution_id $execution_id --num_epochs 150 --num_folds 5 --fold_num $fold_num
+command="$PYTHON abasp.py --dataset $dataset --execution_id $execution_id --num_epochs 150 --num_folds 5 --fold_num $fold_num --postprocessing $postprocessing"
+if [ "$disable_attention" == "--disable_attention" ]; then
+  command="$command --disable_attention"
+fi
+if [ "$optimize_beam_width" == "--optimize_beam_width" ]; then
+  command="$command --optimize_beam_width"
+fi
+if [ "$train" == "--train" ]; then
+  command="$command --train"
+fi
+echo $command
+$command
 
