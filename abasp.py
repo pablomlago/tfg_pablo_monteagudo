@@ -10,21 +10,29 @@ from predicter.predicter import batched_beam_decode, batched_beam_decode_optimiz
 from trainer.trainer import train_seq2seq_mixed
 from model.metric import levenshtein_similarity
 
+from pathlib import Path
+
+# Set up mandatory folders
+Path("./results/models/").mkdir(parents=True, exist_ok=True)
+
 parser = argparse.ArgumentParser(description="Run the neural net")
 parser.add_argument("--dataset", type=str, required=True)
 parser.add_argument("--execution_id", type=str, required=True)
 parser.add_argument("--num_epochs", type=int, required=True)
 parser.add_argument("--num_folds", type=int, required=True)
 parser.add_argument("--fold_num", type=int, required=True)
-parser.add_argument("--train", type=bool, required=False, default=True)
-parser.add_argument("--beam", type=bool, required=False, default=True)
+# With "action=store_true", we do not need an argument for the flag
+parser.add_argument("--train", action="store_true")
+# With choices we can select the type of postprocessing technique to apply
+parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_monteagudo", "argmax", "random"])
+parser.add_argument("--disable_attention", required=False, action="store_true")
 
 args = parser.parse_args()
 dataset = args.dataset
 execution_id = args.execution_id
 num_epochs = args.num_epochs
 train_required = args.train
-beam_enabled = args.beam
+postprocessing_type = args.postprocessing
 beam_width = 5
 num_folds = 5 if args.num_folds is None else args.num_folds
 
@@ -51,21 +59,41 @@ test_iter = DataLoader(test_dataset_fold[i], batch_size)
 #                        dropout)
 encoder = Seq2SeqEncoderResourceNoPositional(num_activities+3, num_resources+3, embed_size, num_hiddens, time_features, num_layers,
                         dropout)
-decoder = Seq2SeqAttentionDecoderPositional(num_activities+3, embed_size, num_hiddens, num_layers,
-                        dropout)
+if not args.disable_attention:
+    decoder = Seq2SeqAttentionDecoderNoPositional(num_activities+3, embed_size, num_hiddens, num_layers,
+                            dropout)
+else:
+    decoder = Seq2SeqDecoder(num_activities+3, embed_size, num_hiddens, num_layers,
+                             dropout)
 net = d2l.EncoderDecoder(encoder, decoder)
 
+name = dataset + "_fold_" + str(i)
+if args.disable_attention:
+    name = "disable_attention_" + name
 if train_required:
-    losses = train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epochs, device, dataset + "_fold_" + str(i))
+    print("Training...")
+    losses = train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name)
     result = pd.DataFrame(columns=['epoch','loss'])
     for epoch, loss in losses:
         result = result.append({'epoch': epoch, 'loss': loss[0]}, ignore_index=True)
-    result.to_csv(execution_name+'_fold_'+str(i)+'_losses.csv', index=False)
+    if args.disable_attention:
+        result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + '_losses.csv', index=False)
+    else:
+        result.to_csv(execution_name+'_fold_'+str(i)+'_losses.csv', index=False)
 
-if beam_enabled:
-    predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, dataset + "_fold_" + str(i))
+print("Testing...")
+
+# If no postprocessing is enabled ABASP exits
+if postprocessing_type is None:
+    exit(0)
+
+# If we do not train, we need to move the model to the gpu, otherwise we won't be able to load de weights properly
+device = d2l.try_gpu()
+net.to(device)
+if "beam" in postprocessing_type:
+    predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
 else:
-    predictions = predict_seq2seq(net, test_iter, num_steps, device, dataset + "_fold_" + str(i))
+    predictions = predict_seq2seq(net, test_iter, num_steps, device, name, postprocessing_strategy=postprocessing_type)
 
 
 result = pd.DataFrame(columns=['prediction','truth','similarity'])
@@ -74,5 +102,8 @@ for ((_,_,Y_ground_truth,_), predictions_batch) in zip(test_iter, predictions):
         l1, l2, similarity = levenshtein_similarity(pred_trace, ground_truth_trace, num_activities+2)
         result = result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
 print(result['similarity'].mean())
-result.to_csv(execution_name+'_fold_'+str(i)+'.csv', index=False)
+if args.disable_attention:
+    result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + '.csv', index=False)
+else:
+    result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+'.csv', index=False)
 

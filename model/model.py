@@ -165,6 +165,7 @@ class AttentionDecoder(d2l.Decoder):
     @property
     def attention_weights(self):
         raise NotImplementedError
+
 class PositionalEncoding(nn.Module):
     """Positional encoding."""
     def __init__(self, num_hiddens, dropout, max_len=1000):
@@ -243,7 +244,7 @@ class Seq2SeqEncoderResourceNoPositional(d2l.Encoder):
         self.time_features = time_features
         self.embedding_activity = nn.Embedding(num_activities, embed_size)
         self.embedding_resource = nn.Embedding(num_resources, embed_size)
-        self.pos_encoding = PositionalEncoding(embed_size, dropout)
+        #self.pos_encoding = PositionalEncoding(embed_size, dropout)
         self.rnn = nn.GRU(embed_size+embed_size+time_features, num_hiddens, num_layers,
                           dropout=dropout)
 
@@ -256,7 +257,10 @@ class Seq2SeqEncoderResourceNoPositional(d2l.Encoder):
         X = torch.cat((X_emb_activity, X_emb_resource, X[:,:,2:]),2).permute(1, 0, 2)
         # When state is not mentioned, it defaults to zeros
         output, state = self.rnn(X)
-        state = self.pos_encoding(state * math.sqrt(self.embed_size))
+
+        # DEACTIVATE POSITIONAL ENCODING
+        #state = self.pos_encoding(state * math.sqrt(self.embed_size))
+
         # `output` shape: (`num_steps`, `batch_size`, `num_hiddens`)
         # `state` shape: (`num_layers`, `batch_size`, `num_hiddens`)
         return output, state
@@ -321,31 +325,47 @@ class Seq2SeqAttentionDecoderPositional(AttentionDecoder):
         return self._attention_weights
 
 class Seq2SeqDecoder(d2l.Decoder):
-    """The RNN decoder for sequence to sequence learning."""
     def __init__(self, vocab_size, embed_size, num_hiddens, num_layers,
                  dropout=0, **kwargs):
         super(Seq2SeqDecoder, self).__init__(**kwargs)
-        self.embedding = nn.Embedding(vocab_size, embed_size)
         self.embed_size = embed_size
-        self.pos_encoding = PositionalEncoding(embed_size, dropout)
-        self.rnn = nn.GRU(embed_size + num_hiddens, num_hiddens, num_layers,
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.rnn = nn.GRU(embed_size, num_hiddens, num_layers,
                           dropout=dropout)
         self.dense = nn.Linear(num_hiddens, vocab_size)
 
-    def init_state(self, enc_outputs, *args):
-        return enc_outputs[1]
+    def init_state(self, enc_outputs, enc_valid_lens, *args):
+        # Shape of `outputs`: (`num_steps`, `batch_size`, `num_hiddens`).
+        # Shape of `hidden_state[0]`: (`num_layers`, `batch_size`,
+        # `num_hiddens`)
+        outputs, hidden_state = enc_outputs
+        return (outputs.permute(1, 0, 2), hidden_state, enc_valid_lens)
+
+    def update_state(self, enc_outputs, enc_valid_lens, hidden_state, *args):
+        # Shape of `outputs`: (`num_steps`, `batch_size`, `num_hiddens`).
+        # Shape of `hidden_state[0]`: (`num_layers`, `batch_size`,
+        # `num_hiddens`)
+        outputs, _ = enc_outputs
+        return (outputs.permute(1, 0, 2), hidden_state, enc_valid_lens)
 
     def forward(self, X, state):
-        # The output `X` shape: (`num_steps`, `batch_size`, `embed_size`)
-        X = self.pos_encoding(self.embedding(X.to(torch.int)) * math.sqrt(self.embed_size)).permute(1, 0, 2)
-        # Broadcast `context` so it has the same `num_steps` as `X`
-        context = state[-1].repeat(X.shape[0], 1, 1)
-        X_and_context = torch.cat((X, context), 2)
-        output, state = self.rnn(X_and_context, state)
-        output = self.dense(output).permute(1, 0, 2)
-        # `output` shape: (`batch_size`, `num_steps`, `vocab_size`)
-        # `state` shape: (`num_layers`, `batch_size`, `num_hiddens`)
-        return output, state
+        # Shape of `enc_outputs`: (`batch_size`, `num_steps`, `num_hiddens`).
+        # Shape of `hidden_state[0]`: (`num_layers`, `batch_size`,
+        # `num_hiddens`)
+        enc_outputs, hidden_state, enc_valid_lens = state
+        # Shape of the output `X`: (`num_steps`, `batch_size`, `embed_size`)
+        X = self.embedding(X.to(torch.int)).permute(1, 0, 2)
+        outputs = []
+        for x in X:
+            # Reshape `x` as (1, `batch_size`, `embed_size` + `num_hiddens`)
+            out, hidden_state = self.rnn(torch.unsqueeze(x, dim=0), hidden_state)
+            outputs.append(out)
+        # After fully-connected layer transformation, shape of `outputs`:
+        # (`num_steps`, `batch_size`, `vocab_size`)
+        outputs = self.dense(torch.cat(outputs, dim=0))
+        return outputs.permute(1, 0, 2), [
+            enc_outputs, hidden_state, enc_valid_lens]
+
 
 class Seq2SeqAttentionDecoderNoPositional(AttentionDecoder):
     def __init__(self, vocab_size, embed_size, num_hiddens, num_layers,

@@ -4,7 +4,7 @@ import pandas as pd
 import shutil
 
 
-results_folder = "./debugged/results/"
+results_folder = "./results_no_positional/"
 
 final_data = []
 for file in os.listdir(results_folder):
@@ -14,7 +14,7 @@ for file in os.listdir(results_folder):
         log, fold = re.match(r'(.*)_experimentation_tfg_.*_fold_(\d+)', file).groups()
         final_data.append(
             {
-                "log"  : log,
+                "log" : log,
                 "fold" : fold,
                 "mean_dl" : mean_dl
             }

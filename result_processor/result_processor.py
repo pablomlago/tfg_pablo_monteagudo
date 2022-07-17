@@ -5,11 +5,12 @@ import shutil
 
 
 folder_output_path = "./data/paper_results/results/"
+input_result_path = "../results/"
 
 final_data = []
-for file in os.listdir("../results/"):
+for file in os.listdir(input_result_path):
     if ".csv" in file and "losses" not in file:
-        df = pd.read_csv(os.path.join("../results", file))
+        df = pd.read_csv(os.path.join(input_result_path, file))
         mean_dl = df["similarity"].mean()
         log, fold = re.match(r'(.*)_experimentation_tfg_.*_fold_(\d+)', file).groups()
         final_data.append(

@@ -1,6 +1,7 @@
 #!/bin/bash
 EXECUTION_ID="experimentation_tfg"
 NUM_FOLDS=5
+
 for file in data/data_complete/*.csv
 do
     name=${file##*/}
