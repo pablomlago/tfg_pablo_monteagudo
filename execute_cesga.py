@@ -13,7 +13,7 @@ for file in os.listdir("./data/data_complete"):
         base = file.replace(".csv", "")
         for i in range(5):
             fold_num = i
-            command = f"./execute_job.sh --dataset {base} --execution_id EXPERIMENTACION_TFG --fold_num {i}"
+            command = f"sbatch ./execute_job.sh --dataset {base} --execution_id EXPERIMENTACION_TFG --fold_num {i}"
             if args.train:
                 command += " --train"
             if args.postprocessing:
