@@ -50,7 +50,7 @@ for (file in files) {
     fold <- gsub("train_fold(.).*", "\\1", file)
     log <- gsub("train_fold._variation._(.*).xes.gz/.*", "\\1", file)
     accuracy <- line$V2
-    new_row <- list(accuracy=as.numeric(accuracy), approach="ABASP", fold=as.integer(fold), log=tolower(log))
+    new_row <- list(approach="ABASP", accuracy=as.numeric(accuracy), fold=as.integer(fold), log=tolower(log))
     data_per_fold[nrow(data_per_fold) + 1, ] <- new_row
 }
 data_per_fold$accuracy <- as.numeric(data_per_fold$accuracy)
@@ -59,6 +59,7 @@ df_xd <- data_per_fold
 df_xd["accuracy"] <- round(df_xd["accuracy"], 2)
 data_per_fold_reshaped <- dcast(df_xd, log ~ approach + fold, value.var="accuracy")
 write.csv(data_per_fold_reshaped, "./data/paper_results/full_results.csv")
+
 
 # Group by approach and log and calculate the average accuracy
 acc_data <- ddply(data_per_fold, .(approach, log), summarize, avg_accuracy=mean(accuracy) )
