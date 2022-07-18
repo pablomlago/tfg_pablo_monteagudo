@@ -51,7 +51,11 @@ lr, device = 0.005, d2l.try_gpu()
 i = args.fold_num
 
 num_activities = num_activities_fold[i]
-num_resources = num_resources_fold[i]
+# TODO: this is not very elegant, but it works
+try:
+    num_resources = num_resources_fold[i]
+except IndexError:
+    num_resources = -3
 train_iter = DataLoader(train_dataset_fold[i], batch_size)
 val_iter = DataLoader(train_dataset_fold[i], batch_size)
 test_iter = DataLoader(test_dataset_fold[i], batch_size)

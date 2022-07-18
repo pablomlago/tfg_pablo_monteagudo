@@ -243,18 +243,26 @@ class Seq2SeqEncoderResourceNoPositional(d2l.Encoder):
         self.embed_size = embed_size
         self.time_features = time_features
         self.embedding_activity = nn.Embedding(num_activities, embed_size)
-        self.embedding_resource = nn.Embedding(num_resources, embed_size)
-        #self.pos_encoding = PositionalEncoding(embed_size, dropout)
-        self.rnn = nn.GRU(embed_size+embed_size+time_features, num_hiddens, num_layers,
-                          dropout=dropout)
+        self.num_resources = num_resources
+        # self.pos_encoding = PositionalEncoding(embed_size, dropout)
+        if num_resources > 0:
+            self.embedding_resource = nn.Embedding(num_resources, embed_size)
+            self.rnn = nn.GRU(embed_size+embed_size+time_features, num_hiddens, num_layers,
+                              dropout=dropout)
+        else:
+            self.rnn = nn.GRU(embed_size+time_features, num_hiddens, num_layers,
+                              dropout=dropout)
 
     def forward(self, X, *args):
         # The output `X` shape: (`batch_size`, `num_steps`, `embed_size`)
         X_emb_activity = self.embedding_activity(X[:,:,0].to(torch.int))
-        X_emb_resource = self.embedding_resource(X[:,:,1].to(torch.int))
-        #X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
-        # In RNN models, the first axis corresponds to time steps
-        X = torch.cat((X_emb_activity, X_emb_resource, X[:,:,2:]),2).permute(1, 0, 2)
+        if self.num_resources > 0:
+            X_emb_resource = self.embedding_resource(X[:,:,1].to(torch.int))
+            #X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
+            # In RNN models, the first axis corresponds to time steps
+            X = torch.cat((X_emb_activity, X_emb_resource, X[:,:,2:]),2).permute(1, 0, 2)
+        else:
+            X = torch.cat((X_emb_activity, X[:,:,1:]),2).permute(1, 0, 2)
         # When state is not mentioned, it defaults to zeros
         output, state = self.rnn(X)
 

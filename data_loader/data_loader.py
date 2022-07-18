@@ -244,8 +244,11 @@ def __vectorize_fold_seq_seq_time_resouce(df, num_activities, case_id_col, activ
     #We aggregate the cases together to generate the traces
     tracesGroupedDf = df.groupby(case_id_col).aggregate(lambda x : (list(x))).reset_index(drop=True)
     #We are only interested in the activity column
-    tracesDf = tracesGroupedDf[[activity_col, resource_col]+time_features]
-     
+    if resource_col in tracesGroupedDf.columns:
+        tracesDf = tracesGroupedDf[[activity_col, resource_col]+time_features]
+    else:
+        tracesDf = tracesGroupedDf[[activity_col]+time_features]
+
     tracesInput = []
     validInput = []
     tracesOutput = []
@@ -276,7 +279,10 @@ def __load_dataset_time_resource_log(filename, timestamp_col, case_id_col, activ
     #We load the dataset
     df = pd.read_csv(filename, header=0, delimiter=',', keep_default_na=False, dtype=object)
     #We select only the columns we are interested in
-    df = df[[case_id_col, activity_col, resource_col, timestamp_col]]
+    if resource_col in df.columns:
+        df = df[[case_id_col, activity_col, resource_col, timestamp_col]]
+    else:
+        df = df[[case_id_col, activity_col, timestamp_col]]
     #Convert timestamps to datetime format
     df[timestamp_col] = df[timestamp_col].apply(lambda x : dt.datetime.strptime(x, format_timestamp))
     #Add column with the time diffference between the previous event in the trace and the current event
@@ -425,11 +431,20 @@ def load_dataset_seq_seq_time_resource_fold_csv(dataset, num_folds):
         time_features = ['timesincemidnight','month','weekday','hour','timesincelastevent','timesincecasestart']    
         #We label encode the activities
         print('Encode categorical features------')
-        df_train, df_val, df_test, num_categories = __label_encode_column_list(fold_train, fold_val, fold_test, [dataset_config['activity_col'], dataset_config['resource_col']])
+        categorical_columns = [dataset_config["activity_col"]]
+
+        # TODO: technically, we should open the dataset and inspect the columns
+        if dataset != "SEPSIS" and dataset != "nasa":
+            categorical_columns.append(dataset_config["resource_col"])
+        df_train, df_val, df_test, num_categories = __label_encode_column_list(fold_train, fold_val, fold_test, categorical_columns)
         #We add to the configuration the number of activities
         num_activities = num_categories[0]
         num_activities_fold.append(num_activities)
-        num_resources_fold.append(num_categories[1])
+
+        # TODO: technically, we should open the dataset and inspect the columns
+        if dataset != "SEPSIS" and dataset != "nasa":
+            num_resources_fold.append(num_categories[1])
+
         #print(num_activities)
         #We label encode the resources
         #df_train, df_val, df_test, num_resources = __label_encode_column(df_train, df_val, df_test, )
