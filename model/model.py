@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from d2l import torch as d2l
 
+
 def masked_softmax(X, valid_lens):
     """Perform softmax operation by masking elements on the last axis."""
     # `X`: 3D tensor, `valid_lens`: 1D or 2D tensor
@@ -17,8 +18,9 @@ def masked_softmax(X, valid_lens):
         # On the last axis, replace masked elements with a very large negative
         # value, whose exponentiation outputs 0
         X = sequence_mask(X.reshape(-1, shape[-1]), valid_lens,
-                              value=-1e3)
+                          value=-1e3)
         return nn.functional.softmax(X.reshape(shape), dim=-1)
+
 
 """
 def sequence_mask(X, valid_len, value=0):
@@ -35,16 +37,19 @@ def sequence_mask(X, valid_len, value=0):
     return X
 """
 
+
 def sequence_mask(X, valid_len, value=0):
     """Mask irrelevant entries in sequences."""
     maxlen = X.size(1)
     mask = torch.arange((maxlen), dtype=torch.float32,
-                        device=X.device)[None, :] >= maxlen-valid_len[:, None]
+                        device=X.device)[None, :] >= maxlen - valid_len[:, None]
     X[~mask] = value
     return X
 
+
 class AdditiveAttention(nn.Module):
     """Additive attention."""
+
     def __init__(self, key_size, query_size, num_hiddens, dropout, **kwargs):
         super(AdditiveAttention, self).__init__(**kwargs)
         self.W_k = nn.Linear(key_size, num_hiddens, bias=False)
@@ -69,9 +74,11 @@ class AdditiveAttention(nn.Module):
         # dimension)
         return torch.bmm(self.dropout(self.attention_weights), values)
 
-#@save
+
+# @save
 class DotProductAttention(nn.Module):
     """Scaled dot product attention."""
+
     def __init__(self, dropout, **kwargs):
         super(DotProductAttention, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
@@ -88,9 +95,11 @@ class DotProductAttention(nn.Module):
         self.attention_weights = masked_softmax(scores, valid_lens)
         return torch.bmm(self.dropout(self.attention_weights), values)
 
-#@save
+
+# @save
 class MultiHeadAttention(nn.Module):
     """Multi-head attention."""
+
     def __init__(self, key_size, query_size, value_size, num_hiddens,
                  num_heads, dropout, bias=False, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
@@ -128,7 +137,8 @@ class MultiHeadAttention(nn.Module):
         output_concat = transpose_output(output, self.num_heads)
         return self.W_o(output_concat)
 
-#@save
+
+# @save
 def transpose_qkv(X, num_heads):
     """Transposition for parallel computation of multiple attention heads."""
     # Shape of input `X`:
@@ -149,7 +159,7 @@ def transpose_qkv(X, num_heads):
     return X.reshape(-1, X.shape[2], X.shape[3])
 
 
-#@save
+# @save
 def transpose_output(X, num_heads):
     """Reverse the operation of `transpose_qkv`."""
     X = X.reshape(-1, num_heads, X.shape[1], X.shape[2])
@@ -159,6 +169,7 @@ def transpose_output(X, num_heads):
 
 class AttentionDecoder(d2l.Decoder):
     """The base attention-based decoder interface."""
+
     def __init__(self, **kwargs):
         super(AttentionDecoder, self).__init__(**kwargs)
 
@@ -166,8 +177,10 @@ class AttentionDecoder(d2l.Decoder):
     def attention_weights(self):
         raise NotImplementedError
 
+
 class PositionalEncoding(nn.Module):
     """Positional encoding."""
+
     def __init__(self, num_hiddens, dropout, max_len=1000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(dropout)
@@ -183,8 +196,10 @@ class PositionalEncoding(nn.Module):
         X = X + self.P[:, :X.shape[1], :].to(X.device)
         return self.dropout(X)
 
+
 class Seq2SeqEncoderPositional(d2l.Encoder):
     """The RNN encoder for sequence to sequence learning."""
+
     def __init__(self, vocab_size, embed_size, num_hiddens, time_features, num_layers,
                  dropout=0, **kwargs):
         super(Seq2SeqEncoderPositional, self).__init__(**kwargs)
@@ -193,22 +208,24 @@ class Seq2SeqEncoderPositional(d2l.Encoder):
         self.time_features = time_features
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.pos_encoding = PositionalEncoding(embed_size, dropout)
-        self.rnn = nn.GRU(embed_size+time_features, num_hiddens, num_layers,
+        self.rnn = nn.GRU(embed_size + time_features, num_hiddens, num_layers,
                           dropout=dropout)
 
     def forward(self, X, *args):
         # The output `X` shape: (`batch_size`, `num_steps`, `embed_size`)
-        X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
+        X_emb = self.pos_encoding(self.embedding(X[:, :, 0].to(torch.int)) * math.sqrt(self.embed_size))
         # In RNN models, the first axis corresponds to time steps
-        X = torch.cat((X_emb, X[:,:,1:]),2).permute(1, 0, 2)
+        X = torch.cat((X_emb, X[:, :, 1:]), 2).permute(1, 0, 2)
         # When state is not mentioned, it defaults to zeros
         output, state = self.rnn(X)
         # `output` shape: (`num_steps`, `batch_size`, `num_hiddens`)
         # `state` shape: (`num_layers`, `batch_size`, `num_hiddens`)
         return output, state
 
+
 class Seq2SeqEncoderPositionalResource(d2l.Encoder):
     """The RNN encoder for sequence to sequence learning."""
+
     def __init__(self, num_activities, num_resources, embed_size, num_hiddens, time_features, num_layers,
                  dropout=0, **kwargs):
         super(Seq2SeqEncoderPositionalResource, self).__init__(**kwargs)
@@ -218,24 +235,27 @@ class Seq2SeqEncoderPositionalResource(d2l.Encoder):
         self.embedding_activity = nn.Embedding(num_activities, embed_size)
         self.embedding_resource = nn.Embedding(num_resources, embed_size)
         self.pos_encoding = PositionalEncoding(embed_size, dropout)
-        self.rnn = nn.GRU(embed_size+embed_size+time_features, num_hiddens, num_layers,
+        self.rnn = nn.GRU(embed_size + embed_size + time_features, num_hiddens, num_layers,
                           dropout=dropout)
 
     def forward(self, X, *args):
         # The output `X` shape: (`batch_size`, `num_steps`, `embed_size`)
-        X_emb_activity = self.pos_encoding(self.embedding_activity(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
-        X_emb_resource = self.embedding_resource(X[:,:,1].to(torch.int))
-        #X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
+        X_emb_activity = self.pos_encoding(
+            self.embedding_activity(X[:, :, 0].to(torch.int)) * math.sqrt(self.embed_size))
+        X_emb_resource = self.embedding_resource(X[:, :, 1].to(torch.int))
+        # X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
         # In RNN models, the first axis corresponds to time steps
-        X = torch.cat((X_emb_activity, X_emb_resource, X[:,:,2:]),2).permute(1, 0, 2)
+        X = torch.cat((X_emb_activity, X_emb_resource, X[:, :, 2:]), 2).permute(1, 0, 2)
         # When state is not mentioned, it defaults to zeros
         output, state = self.rnn(X)
         # `output` shape: (`num_steps`, `batch_size`, `num_hiddens`)
         # `state` shape: (`num_layers`, `batch_size`, `num_hiddens`)
         return output, state
 
+
 class Seq2SeqEncoderResourceNoPositional(d2l.Encoder):
     """The RNN encoder for sequence to sequence learning."""
+
     def __init__(self, num_activities, num_resources, embed_size, num_hiddens, time_features, num_layers,
                  dropout=0, **kwargs):
         super(Seq2SeqEncoderResourceNoPositional, self).__init__(**kwargs)
@@ -247,32 +267,31 @@ class Seq2SeqEncoderResourceNoPositional(d2l.Encoder):
         # self.pos_encoding = PositionalEncoding(embed_size, dropout)
         if num_resources > 0:
             self.embedding_resource = nn.Embedding(num_resources, embed_size)
-            self.rnn = nn.GRU(embed_size+embed_size+time_features, num_hiddens, num_layers,
+            self.rnn = nn.GRU(embed_size + embed_size + time_features, num_hiddens, num_layers,
                               dropout=dropout)
         else:
-            self.rnn = nn.GRU(embed_size+time_features, num_hiddens, num_layers,
+            self.rnn = nn.GRU(embed_size + time_features, num_hiddens, num_layers,
                               dropout=dropout)
 
     def forward(self, X, *args):
         # The output `X` shape: (`batch_size`, `num_steps`, `embed_size`)
-        X_emb_activity = self.embedding_activity(X[:,:,0].to(torch.int))
+        X_emb_activity = self.embedding_activity(X[:, :, 0].to(torch.int))
         if self.num_resources > 0:
-            X_emb_resource = self.embedding_resource(X[:,:,1].to(torch.int))
-            #X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
+            X_emb_resource = self.embedding_resource(X[:, :, 1].to(torch.int))
+            # X_emb = self.pos_encoding(self.embedding(X[:,:,0].to(torch.int)) * math.sqrt(self.embed_size))
             # In RNN models, the first axis corresponds to time steps
-            X = torch.cat((X_emb_activity, X_emb_resource, X[:,:,2:]),2).permute(1, 0, 2)
+            X = torch.cat((X_emb_activity, X_emb_resource, X[:, :, 2:]), 2).permute(1, 0, 2)
         else:
-            X = torch.cat((X_emb_activity, X[:,:,1:]),2).permute(1, 0, 2)
+            X = torch.cat((X_emb_activity, X[:, :, 1:]), 2).permute(1, 0, 2)
         # When state is not mentioned, it defaults to zeros
         output, state = self.rnn(X)
 
         # DEACTIVATE POSITIONAL ENCODING
-        #state = self.pos_encoding(state * math.sqrt(self.embed_size))
+        # state = self.pos_encoding(state * math.sqrt(self.embed_size))
 
         # `output` shape: (`num_steps`, `batch_size`, `num_hiddens`)
         # `state` shape: (`num_layers`, `batch_size`, `num_hiddens`)
         return output, state
-
 
 
 class Seq2SeqAttentionDecoderPositional(AttentionDecoder):
@@ -280,7 +299,7 @@ class Seq2SeqAttentionDecoderPositional(AttentionDecoder):
                  dropout=0, **kwargs):
         super(Seq2SeqAttentionDecoderPositional, self).__init__(**kwargs)
         self.attention = AdditiveAttention(num_hiddens, num_hiddens,
-                                               num_hiddens, dropout)
+                                           num_hiddens, dropout)
         self.embed_size = embed_size
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.pos_encoding = PositionalEncoding(embed_size, dropout)
@@ -332,6 +351,7 @@ class Seq2SeqAttentionDecoderPositional(AttentionDecoder):
     def attention_weights(self):
         return self._attention_weights
 
+
 class Seq2SeqDecoder(d2l.Decoder):
     def __init__(self, vocab_size, embed_size, num_hiddens, num_layers,
                  dropout=0, **kwargs):
@@ -380,7 +400,7 @@ class Seq2SeqAttentionDecoderNoPositional(AttentionDecoder):
                  dropout=0, **kwargs):
         super(Seq2SeqAttentionDecoderNoPositional, self).__init__(**kwargs)
         self.attention = AdditiveAttention(num_hiddens, num_hiddens,
-                                               num_hiddens, dropout)
+                                           num_hiddens, dropout)
         self.embed_size = embed_size
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.rnn = nn.GRU(embed_size + num_hiddens, num_hiddens, num_layers,
@@ -431,8 +451,10 @@ class Seq2SeqAttentionDecoderNoPositional(AttentionDecoder):
     def attention_weights(self):
         return self._attention_weights
 
+
 class Seq2SeqDecoderNoPositional(d2l.Decoder):
     """The RNN decoder for sequence to sequence learning."""
+
     def __init__(self, vocab_size, embed_size, num_hiddens, num_layers,
                  dropout=0, **kwargs):
         super(Seq2SeqDecoder, self).__init__(**kwargs)
@@ -456,4 +478,3 @@ class Seq2SeqDecoderNoPositional(d2l.Decoder):
         # `output` shape: (`batch_size`, `num_steps`, `vocab_size`)
         # `state` shape: (`num_layers`, `batch_size`, `num_hiddens`)
         return output, state
-
