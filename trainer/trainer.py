@@ -19,6 +19,8 @@ def train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epoch
     net.apply(xavier_init_weights)
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=20, eta_min=0.00001)
+
     loss = SoftmaxCELoss()
     losses = []
     best_model_loss = float('inf')
@@ -40,6 +42,8 @@ def train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epoch
                 optimizer.step()
                 with torch.no_grad():
                     metric.add(l.sum(), num_tokens)
+
+        scheduler.step()
         #We evaluate the model over the validation set
         net.eval()
         current_loss = 0
