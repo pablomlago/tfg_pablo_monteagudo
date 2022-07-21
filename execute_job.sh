@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH -c 32
 #SBATCH --mem=32G
-#SBATCH --time=24:00:00
+#SBATCH --time=72:00:00
 PYTHON=/mnt/netapp2/Store_uni/home/usc/ci/jva/miniconda3/envs/abasp/bin/python3.9
 
 while [[ "$#" -gt 0 ]]; do case $1 in
