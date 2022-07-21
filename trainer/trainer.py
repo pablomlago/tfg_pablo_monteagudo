@@ -19,7 +19,7 @@ def train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epoch
     net.apply(xavier_init_weights)
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-    loss = SoftmaxCELoss(label_smoothing=0.1)
+    loss = SoftmaxCELoss()
     losses = []
     best_model_loss = float('inf')
     for epoch in range(num_epochs):

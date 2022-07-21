@@ -11,6 +11,8 @@ from trainer.trainer import train_seq2seq_mixed
 from model.metric import levenshtein_similarity
 
 from pathlib import Path
+import torch
+torch.manual_seed(42)
 
 # Set up mandatory folders
 Path("./results/models/").mkdir(parents=True, exist_ok=True)
@@ -56,8 +58,8 @@ try:
     num_resources = num_resources_fold[i]
 except IndexError:
     num_resources = -3
-train_iter = DataLoader(train_dataset_fold[i], batch_size)
-val_iter = DataLoader(train_dataset_fold[i], batch_size)
+train_iter = DataLoader(train_dataset_fold[i], batch_size, shuffle=True, num_workers=8)
+val_iter = DataLoader(train_dataset_fold[i], batch_size, shuffle=True, num_workers=8)
 test_iter = DataLoader(test_dataset_fold[i], batch_size)
 
 #encoder = Seq2SeqEncoderPositional(num_activities+3, embed_size, num_hiddens, time_features, num_layers,
