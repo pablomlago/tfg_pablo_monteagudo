@@ -99,14 +99,15 @@ net.to(device)
 
 if args.optimize_beam_width:
     optimization_results = {}
-    beam_width_to_try = [15, 10, 3, 5, 7, 10]
+    #beam_width_to_try = [15, 10, 3, 5, 7, 10]
+    beam_width_to_try = [3, 5]
     if "beam" in postprocessing_type:
-        for i in beam_width_to_try:
-            print("Optimizing beam width: " + str(i))
-            if num_activities + 2 < i:
-                print("Beam width " + str(i) + " too high, skipping")
+        for j in beam_width_to_try:
+            print("Optimizing beam width: " + str(j))
+            if num_activities + 2 < j:
+                print("Beam width " + str(j) + " too high, skipping")
                 continue
-            curr_beam_width = i
+            curr_beam_width = j
             predictions = batched_beam_decode_optimized(net, val_iter, num_steps, curr_beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
             val_result = pd.DataFrame(columns=['prediction', 'truth', 'similarity'])
             for ((_,_,Y_ground_truth,_), predictions_batch) in zip(val_iter, predictions):
@@ -117,6 +118,11 @@ if args.optimize_beam_width:
             optimization_results[curr_beam_width] = avg_val_dl
         beam_width = max(optimization_results, key=optimization_results.get)
         print("Best beam width: " + str(beam_width))
+
+        with open(execution_name + '_fold_' + str(i) + '_beam_width_optimization_results.csv', 'w') as f:
+            for key, value in optimization_results.items():
+                f.write("%s,%s\n" % (key, value))
+
 
 
 print("Testing...")
@@ -133,7 +139,15 @@ for ((_,_,Y_ground_truth,_), predictions_batch) in zip(test_iter, predictions):
         result = result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
 print(result['similarity'].mean())
 if args.disable_attention:
-    result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + '.csv', index=False)
+    if args.optimize_beam_width:
+        result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + "_beam_width_" + str(beam_width) + '.csv', index=False)
+    else:
+        result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + '.csv', index=False)
 else:
-    result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+'.csv', index=False)
+    if args.optimize_beam_width:
+        result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+ "_beam_width_" + str(beam_width) + '.csv', index=False)
+    else:
+        result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+'.csv', index=False)
+
+
 
