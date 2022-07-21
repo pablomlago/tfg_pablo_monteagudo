@@ -58,8 +58,8 @@ try:
     num_resources = num_resources_fold[i]
 except IndexError:
     num_resources = -3
-train_iter = DataLoader(train_dataset_fold[i], batch_size, shuffle=True, num_workers=8)
-val_iter = DataLoader(train_dataset_fold[i], batch_size, shuffle=True, num_workers=8)
+train_iter = DataLoader(train_dataset_fold[i], batch_size)
+val_iter = DataLoader(train_dataset_fold[i], batch_size)
 test_iter = DataLoader(test_dataset_fold[i], batch_size)
 
 #encoder = Seq2SeqEncoderPositional(num_activities+3, embed_size, num_hiddens, time_features, num_layers,
