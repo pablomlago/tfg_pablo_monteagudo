@@ -113,7 +113,7 @@ if args.optimize_beam_width:
             for ((_,_,Y_ground_truth,_), predictions_batch) in zip(val_iter, predictions):
                 for pred_trace, ground_truth_trace in zip(predictions_batch.tolist(), Y_ground_truth.tolist()):
                     l1, l2, similarity = levenshtein_similarity(pred_trace, ground_truth_trace, num_activities+2)
-                    result = val_result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
+                    val_result = val_result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
             avg_val_dl = val_result['similarity'].mean()
             optimization_results[curr_beam_width] = avg_val_dl
         beam_width = max(optimization_results, key=optimization_results.get)
