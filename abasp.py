@@ -99,8 +99,8 @@ net.to(device)
 
 if args.optimize_beam_width:
     optimization_results = {}
-    #beam_width_to_try = [15, 10, 3, 5, 7, 10]
-    beam_width_to_try = [3, 5]
+    beam_width_to_try = [15, 10, 3, 5, 7, 10, 1]
+    #beam_width_to_try = [3, 5]
     if "beam" in postprocessing_type:
         for j in beam_width_to_try:
             print("Optimizing beam width: " + str(j))
