@@ -29,6 +29,7 @@ parser.add_argument("--train", action="store_true")
 parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_monteagudo", "argmax", "random"])
 parser.add_argument("--disable_attention", required=False, action="store_true")
 parser.add_argument("--optimize_beam_width", required=False, action="store_true")
+parser.add_argument("--store_prefixes_in_results", required=False, action="store_true")
 
 args = parser.parse_args()
 dataset = args.dataset
@@ -39,7 +40,10 @@ postprocessing_type = args.postprocessing
 beam_width = 5
 num_folds = 5 if args.num_folds is None else args.num_folds
 
-execution_name = f'results/{dataset}_{args.execution_id}_{args.num_epochs}'
+if not args.disable_attention:
+    execution_name = f'results_attention/{dataset}_{args.execution_id}_{args.num_epochs}'
+else:
+    execution_name = f'results_no_attention/{dataset}_{args.execution_id}_{args.num_epochs}'
 
 #train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold = load_dataset_seq_seq_time_fold_csv(dataset, num_folds)
 train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold, num_resources_fold = load_dataset_seq_seq_time_resource_fold_csv(dataset, num_folds)
@@ -108,7 +112,7 @@ if args.optimize_beam_width:
                 print("Beam width " + str(j) + " too high, skipping")
                 continue
             curr_beam_width = j
-            predictions = batched_beam_decode_optimized(net, val_iter, num_steps, curr_beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
+            predictions = batched_beam_decode_optimized(net, val_iter, num_steps, curr_beam_width, num_activities+2, device, name, not args.disable_attention, postprocessing_type=postprocessing_type)
             val_result = pd.DataFrame(columns=['prediction', 'truth', 'similarity'])
             for ((_,_,Y_ground_truth,_), predictions_batch) in zip(val_iter, predictions):
                 for pred_trace, ground_truth_trace in zip(predictions_batch.tolist(), Y_ground_truth.tolist()):
@@ -127,27 +131,45 @@ if args.optimize_beam_width:
 
 print("Testing...")
 if "beam" in postprocessing_type:
-    predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, postprocessing_type=postprocessing_type)
+    predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, not args.disable_attention, postprocessing_type=postprocessing_type)
 else:
-    predictions = predict_seq2seq(net, test_iter, num_steps, device, name, postprocessing_strategy=postprocessing_type)
+    predictions = predict_seq2seq(net, test_iter, num_steps, device, name, not args.disable_attention, postprocessing_strategy=postprocessing_type)
 
 
-result = pd.DataFrame(columns=['prediction','truth','similarity'])
-for ((_,_,Y_ground_truth,_), predictions_batch) in zip(test_iter, predictions):
-    for pred_trace, ground_truth_trace in zip(predictions_batch.tolist(), Y_ground_truth.tolist()):
-        l1, l2, similarity = levenshtein_similarity(pred_trace, ground_truth_trace, num_activities+2)
-        result = result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
-print(result['similarity'].mean())
-if args.disable_attention:
-    if args.optimize_beam_width:
-        result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + "_beam_width_" + str(beam_width) + '.csv', index=False)
+if not args.store_prefixes_in_results:
+    result = pd.DataFrame(columns=['prediction','truth','similarity'])
+    for ((_,_,Y_ground_truth,_), predictions_batch) in zip(test_iter, predictions):
+        for pred_trace, ground_truth_trace in zip(predictions_batch.tolist(), Y_ground_truth.tolist()):
+            l1, l2, similarity = levenshtein_similarity(pred_trace, ground_truth_trace, num_activities+2)
+            result = result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity}, ignore_index=True)
+    print(result['similarity'].mean())
+    if args.disable_attention:
+        if args.optimize_beam_width:
+            result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + "_beam_width_" + str(beam_width) + '.csv', index=False)
+        else:
+            result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + '.csv', index=False)
     else:
-        result.to_csv(execution_name + '_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + '.csv', index=False)
+        if args.optimize_beam_width:
+            result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+ "_beam_width_" + str(beam_width) + '.csv', index=False)
+        else:
+            result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+'.csv', index=False)
+
 else:
-    if args.optimize_beam_width:
-        result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+ "_beam_width_" + str(beam_width) + '.csv', index=False)
+    result = pd.DataFrame(columns=["prefix_length", 'prediction','truth','similarity'])
+    for ((_,enc_len,Y_ground_truth,_), predictions_batch) in zip(test_iter, predictions):
+        for prefix_length, pred_trace, ground_truth_trace in zip(enc_len, predictions_batch.tolist(), Y_ground_truth.tolist()):
+            l1, l2, similarity = levenshtein_similarity(pred_trace, ground_truth_trace, num_activities+2)
+            result = result.append({'prediction': pred_trace[:l1], 'truth': ground_truth_trace[:l2], 'similarity': similarity, "prefix_length" : prefix_length.numpy()}, ignore_index=True)
+    print(result['similarity'].mean())
+    if args.disable_attention:
+        if args.optimize_beam_width:
+            result.to_csv(execution_name + '_with_prefix_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + "_beam_width_" + str(beam_width) + '.csv', index=False)
+        else:
+            result.to_csv(execution_name + '_with_prefix_disable_attention_fold_' + str(i) + "_postprocessing_" + args.postprocessing + '.csv', index=False)
     else:
-        result.to_csv(execution_name+'_fold_'+str(i)+"_postprocessing_"+args.postprocessing+'.csv', index=False)
-
+        if args.optimize_beam_width:
+            result.to_csv(execution_name+'_with_prefix_fold_'+str(i)+"_postprocessing_"+args.postprocessing+ "_beam_width_" + str(beam_width) + '.csv', index=False)
+        else:
+            result.to_csv(execution_name+'_with_prefix_fold_'+str(i)+"_postprocessing_"+args.postprocessing+'.csv', index=False)
 
 

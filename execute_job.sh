@@ -12,6 +12,7 @@ while [[ "$#" -gt 0 ]]; do case $1 in
     -p|--postprocessing) postprocessing="$2"; shift; shift ;;
     -a|--disable_attention) disable_attention="$1";  shift ;;
     -o|--optimize_beam_width) optimize_beam_width="$1"; shift ;;
+    -s|--store_prefixes_in_results) store_prefixes_in_results="$1"; shift ;;
     -t|--train) train="$1"; shift ;;
     *) echo "Unknown parameter: $1"; exit 1 ;;
   esac
@@ -26,6 +27,9 @@ if [ "$optimize_beam_width" == "--optimize_beam_width" ]; then
 fi
 if [ "$train" == "--train" ]; then
   command="$command --train"
+fi
+if [ "$store_prefixes_in_results" == "--store_prefixes_in_results" ]; then
+  command="$command --store_prefixes_in_results"
 fi
 echo $command
 $command

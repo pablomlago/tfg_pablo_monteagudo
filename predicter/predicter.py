@@ -149,11 +149,14 @@ def setup_reproducibility():
 
 
 def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_token,
-                                  device, name, postprocessing_type, save_attention_weights=False):
+                                  device, name, attention_enabled, postprocessing_type,  save_attention_weights=False):
     setup_reproducibility()
     """Predict for sequence to sequence."""
     # We load the best model parameters
-    net.load_state_dict(torch.load(os.path.join("./results/models", name + '_best-model-parameters.pt')))
+    if attention_enabled:
+        net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
+    else:
+        net.load_state_dict(torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
     # Set `net` to eval mode for inference
     net.eval()
     # We get predictions for each batch
@@ -220,11 +223,14 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
 
 
 def predict_seq2seq(net, data_iter, num_steps,
-                    device, name, postprocessing_strategy, save_attention_weights=False):
+                    device, name, attention_enabled, postprocessing_strategy, save_attention_weights=False):
     setup_reproducibility()
     """Predict for sequence to sequence."""
     # We load the best model parameters
-    net.load_state_dict(torch.load(os.path.join("./results/models", name + '_best-model-parameters.pt')))
+    if attention_enabled:
+        net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
+    else:
+        net.load_state_dict(torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
     # Set `net` to eval mode for inference
     net.eval()
     # We get predictions for each batch
