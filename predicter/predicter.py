@@ -236,20 +236,23 @@ def predict_seq2seq(net, data_iter, num_steps,
     # We get predictions for each batch
     preds = []
     for batch in data_iter:
-        enc_X, enc_valid_len, _, _ = [x.to(device) for x in batch]
-        # We get the outputs of the encoder
-        enc_outputs = net.encoder(enc_X, enc_valid_len)
-        dec_state = net.decoder.init_state(enc_outputs, enc_valid_len)
-        # We prepare the first output for the decoder
-        dec_X = enc_X[:, -1, 0].reshape(-1, 1).expand(-1, num_steps + 1).detach().clone()
-        # We iterate over the steps in the decoder
-        for i in range(num_steps):
-            Y, dec_state = net.decoder(dec_X[:, :num_steps], dec_state)
-            if postprocessing_strategy == "argmax":
-                dec_X[:, i + 1] = Y.argmax(dim=2)[:, i]
-            elif postprocessing_strategy == "random":
-                dec_X[:, i + 1] = torch.multinomial(Y.softmax(dim=2)[:, i], 1)[:, 0]
-            else:
-                raise ValueError("Unknown postprocessing strategy")
-        preds.append(dec_X[:, 1:].to(torch.int).cpu())
+        batched_enc_X, batched_enc_valid_len, _, _ = [x.to(device) for x in batch]
+        for (enc_X, enc_valid_len) in zip(batched_enc_X, batched_enc_valid_len):
+            enc_X = enc_X.unsqueeze(0)
+            enc_valid_len = enc_valid_len.unsqueeze(0)
+            # We get the outputs of the encoder
+            enc_outputs = net.encoder(enc_X, enc_valid_len)
+            dec_state = net.decoder.init_state(enc_outputs, enc_valid_len)
+            # We prepare the first output for the decoder
+            dec_X = enc_X[:, -1, 0].reshape(-1, 1).expand(-1, num_steps + 1).detach().clone()
+            # We iterate over the steps in the decoder
+            for i in range(num_steps):
+                Y, dec_state = net.decoder(dec_X[:, :num_steps], dec_state)
+                if postprocessing_strategy == "argmax":
+                    dec_X[:, i + 1] = Y.argmax(dim=2)[:, i]
+                elif postprocessing_strategy == "random":
+                    dec_X[:, i + 1] = torch.multinomial(Y.softmax(dim=2)[:, i], 1)[:, 0]
+                else:
+                    raise ValueError("Unknown postprocessing strategy")
+            preds.append(dec_X[:, 1:].to(torch.int).cpu())
     return preds
