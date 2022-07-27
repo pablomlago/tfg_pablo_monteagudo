@@ -149,11 +149,15 @@ def setup_reproducibility():
 
 
 def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_token,
-                                  device, name, postprocessing_type, save_attention_weights=False):
+                                  device, name, attention_enabled, postprocessing_type, save_attention_weights=False):
     setup_reproducibility()
     """Predict for sequence to sequence."""
     # We load the best model parameters
-    net.load_state_dict(torch.load(os.path.join("./results/models", name + '_best-model-parameters.pt')))
+    if attention_enabled:
+        net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
+    else:
+        net.load_state_dict(
+            torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
     # Set `net` to eval mode for inference
     net.eval()
     # We get predictions for each batch
@@ -220,30 +224,49 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
 
 
 def predict_seq2seq(net, data_iter, num_steps,
-                    device, name, postprocessing_strategy, save_attention_weights=False):
+                    device, name, attention_enabled, batch_size, postprocessing_strategy, save_attention_weights=False):
     setup_reproducibility()
     """Predict for sequence to sequence."""
     # We load the best model parameters
-    net.load_state_dict(torch.load(os.path.join("./results/models", name + '_best-model-parameters.pt')))
+    if attention_enabled:
+        net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
+    else:
+        net.load_state_dict(
+            torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
     # Set `net` to eval mode for inference
     net.eval()
     # We get predictions for each batch
     preds = []
+    final_preds = []
     for batch in data_iter:
-        enc_X, enc_valid_len, _, _ = [x.to(device) for x in batch]
-        # We get the outputs of the encoder
-        enc_outputs = net.encoder(enc_X, enc_valid_len)
-        dec_state = net.decoder.init_state(enc_outputs, enc_valid_len)
-        # We prepare the first output for the decoder
-        dec_X = enc_X[:, -1, 0].reshape(-1, 1).expand(-1, num_steps + 1).detach().clone()
-        # We iterate over the steps in the decoder
-        for i in range(num_steps):
-            Y, dec_state = net.decoder(dec_X[:, :num_steps], dec_state)
-            if postprocessing_strategy == "argmax":
-                dec_X[:, i + 1] = Y.argmax(dim=2)[:, i]
-            elif postprocessing_strategy == "random":
-                dec_X[:, i + 1] = torch.multinomial(Y.softmax(dim=2)[:, i], 1)[:, 0]
-            else:
-                raise ValueError("Unknown postprocessing strategy")
-        preds.append(dec_X[:, 1:].to(torch.int).cpu())
-    return preds
+        batch_enc_X, batch_enc_valid_len, _, _ = [x.to(device) for x in batch]
+        for enc_X, enc_valid_len in zip(torch.unbind(batch_enc_X), torch.unbind(batch_enc_valid_len)):
+            enc_X = enc_X.unsqueeze(0)
+            enc_valid_len = enc_valid_len.unsqueeze(0)
+            print("Enc X: ", enc_X.shape)
+            print("Enc valid len: ", enc_valid_len.shape)
+            # We get the outputs of the encoder
+            enc_outputs = net.encoder(enc_X, enc_valid_len)
+            dec_state = net.decoder.init_state(enc_outputs, enc_valid_len)
+            # We prepare the first output for the decoder
+            dec_X = enc_X[:, -1, 0].reshape(-1, 1).expand(-1, num_steps + 1).detach().clone()
+            # We iterate over the steps in the decoder
+            for i in range(num_steps):
+                Y, dec_state = net.decoder(dec_X[:, :num_steps], dec_state)
+                if postprocessing_strategy == "argmax":
+                    dec_X[:, i + 1] = Y.argmax(dim=2)[:, i]
+                elif postprocessing_strategy == "random":
+                    dec_X[:, i + 1] = torch.multinomial(Y.softmax(dim=2)[:, i], 1)[:, 0]
+                else:
+                    raise ValueError("Unknown postprocessing strategy")
+            preds.append(dec_X[:, 1:].to(torch.int).cpu())
+
+    # We need to compact the predictions in chucks of the size of the batch in order to calculate
+    # the similarity correctly.
+    for n_batch, batch in enumerate(data_iter):
+        my_arr = []
+        for i in range(len(batch)):
+            my_arr.append(preds[n_batch * batch_size + i])
+        final_preds.append(torch.cat(my_arr, dim=0))
+
+    return final_preds
