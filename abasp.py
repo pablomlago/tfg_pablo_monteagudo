@@ -133,7 +133,7 @@ print("Testing...")
 if "beam" in postprocessing_type:
     predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, not args.disable_attention, postprocessing_type=postprocessing_type)
 else:
-    predictions = predict_seq2seq(net, test_iter, num_steps, device, name, not args.disable_attention, postprocessing_strategy=postprocessing_type)
+    predictions = predict_seq2seq(net, test_iter, num_steps, device, name, not args.disable_attention, batch_size, postprocessing_strategy=postprocessing_type)
 
 
 if not args.store_prefixes_in_results:

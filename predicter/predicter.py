@@ -149,14 +149,15 @@ def setup_reproducibility():
 
 
 def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_token,
-                                  device, name, attention_enabled, postprocessing_type,  save_attention_weights=False):
+                                  device, name, attention_enabled, postprocessing_type, save_attention_weights=False):
     setup_reproducibility()
     """Predict for sequence to sequence."""
     # We load the best model parameters
     if attention_enabled:
         net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
     else:
-        net.load_state_dict(torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
+        net.load_state_dict(
+            torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
     # Set `net` to eval mode for inference
     net.eval()
     # We get predictions for each batch
@@ -223,23 +224,27 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
 
 
 def predict_seq2seq(net, data_iter, num_steps,
-                    device, name, attention_enabled, postprocessing_strategy, save_attention_weights=False):
+                    device, name, attention_enabled, batch_size, postprocessing_strategy, save_attention_weights=False):
     setup_reproducibility()
     """Predict for sequence to sequence."""
     # We load the best model parameters
     if attention_enabled:
         net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
     else:
-        net.load_state_dict(torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
+        net.load_state_dict(
+            torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
     # Set `net` to eval mode for inference
     net.eval()
     # We get predictions for each batch
     preds = []
+    final_preds = []
     for batch in data_iter:
-        batched_enc_X, batched_enc_valid_len, _, _ = [x.to(device) for x in batch]
-        for (enc_X, enc_valid_len) in zip(batched_enc_X, batched_enc_valid_len):
+        batch_enc_X, batch_enc_valid_len, _, _ = [x.to(device) for x in batch]
+        for enc_X, enc_valid_len in zip(torch.unbind(batch_enc_X), torch.unbind(batch_enc_valid_len)):
             enc_X = enc_X.unsqueeze(0)
             enc_valid_len = enc_valid_len.unsqueeze(0)
+            print("Enc X: ", enc_X.shape)
+            print("Enc valid len: ", enc_valid_len.shape)
             # We get the outputs of the encoder
             enc_outputs = net.encoder(enc_X, enc_valid_len)
             dec_state = net.decoder.init_state(enc_outputs, enc_valid_len)
@@ -255,4 +260,13 @@ def predict_seq2seq(net, data_iter, num_steps,
                 else:
                     raise ValueError("Unknown postprocessing strategy")
             preds.append(dec_X[:, 1:].to(torch.int).cpu())
-    return preds
+
+    # We need to compact the predictions in chucks of the size of the batch in order to calculate
+    # the similarity correctly.
+    for n_batch, batch in enumerate(data_iter):
+        my_arr = []
+        for i in range(len(batch)):
+            my_arr.append(preds[n_batch * batch_size + i])
+        final_preds.append(torch.cat(my_arr, dim=0))
+
+    return final_preds
