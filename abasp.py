@@ -23,7 +23,7 @@ parser.add_argument("--execution_id", type=str, required=True)
 parser.add_argument("--num_epochs", type=int, required=True)
 parser.add_argument("--num_folds", type=int, required=True)
 parser.add_argument("--fold_num", type=int, required=True)
-parser.add_argument("--num_heads", type=int, required=True)
+parser.add_argument("--num_heads", type=int, default=1)
 # With "action=store_true", we do not need an argument for the flag
 parser.add_argument("--train", action="store_true")
 # With choices we can select the type of postprocessing technique to apply
