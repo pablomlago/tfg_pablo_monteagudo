@@ -5,7 +5,7 @@ import pandas as pd
 from torch.utils.data import DataLoader
 from data_loader.data_loader import load_dataset_seq_seq_time_fold_csv, load_dataset_seq_seq_time_resource_fold_csv
 
-from model.model import Seq2SeqAttentionDecoderNoPositional, Seq2SeqDecoder, Seq2SeqEncoderPositional, Seq2SeqAttentionDecoderPositional, Seq2SeqEncoderPositionalResource, Seq2SeqEncoderResourceNoPositional
+from model.model import Seq2SeqAttentionDecoderNoPositional, Seq2SeqDecoder, Seq2SeqEncoderPositional, Seq2SeqAttentionDecoderPositional, Seq2SeqEncoderPositionalResource, Seq2SeqEncoderResourceNoPositional, Seq2SeqMultiHeadAttentionDecoderNoPositional
 from predicter.predicter import batched_beam_decode, batched_beam_decode_optimized, predict_seq2seq
 from trainer.trainer import train_seq2seq_mixed
 from model.metric import levenshtein_similarity
@@ -23,6 +23,7 @@ parser.add_argument("--execution_id", type=str, required=True)
 parser.add_argument("--num_epochs", type=int, required=True)
 parser.add_argument("--num_folds", type=int, required=True)
 parser.add_argument("--fold_num", type=int, required=True)
+parser.add_argument("--num_heads", type=int, required=True)
 # With "action=store_true", we do not need an argument for the flag
 parser.add_argument("--train", action="store_true")
 # With choices we can select the type of postprocessing technique to apply
@@ -35,6 +36,7 @@ args = parser.parse_args()
 dataset = args.dataset
 execution_id = args.execution_id
 num_epochs = args.num_epochs
+num_heads = args.num_heads
 train_required = args.train
 postprocessing_type = args.postprocessing
 beam_width = 5
@@ -71,8 +73,12 @@ test_iter = DataLoader(test_dataset_fold[i], batch_size)
 encoder = Seq2SeqEncoderResourceNoPositional(num_activities+3, num_resources+3, embed_size, num_hiddens, time_features, num_layers,
                         dropout)
 if not args.disable_attention:
-    decoder = Seq2SeqAttentionDecoderNoPositional(num_activities+3, embed_size, num_hiddens, num_layers,
-                            dropout)
+    if num_heads == 1:
+        decoder = Seq2SeqAttentionDecoderNoPositional(num_activities+3, embed_size, num_hiddens, num_layers,
+                                dropout)
+    else:
+        decoder = Seq2SeqMultiHeadAttentionDecoderNoPositional(num_activities+3, embed_size, num_hiddens, num_layers, num_heads,
+                                dropout)
 else:
     decoder = Seq2SeqDecoder(num_activities+3, embed_size, num_hiddens, num_layers,
                              dropout)
