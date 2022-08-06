@@ -271,6 +271,37 @@ def __vectorize_fold_seq_seq_time_resouce(df, num_activities, case_id_col, activ
     #We return the input, output and its corresponding valid lengths
     return tracesInput, validInput, tracesOutput, validOutput
 
+def __vectorize_fold_seq_seq_time_resouce_prepadding(df, num_activities, case_id_col, activity_col, resource_col, max_length_trace, time_features):
+    #We aggregate the cases together to generate the traces
+    tracesGroupedDf = df.groupby(case_id_col).aggregate(lambda x : (list(x))).reset_index(drop=True)
+    #We are only interested in the activity column
+    if resource_col in tracesGroupedDf.columns:
+        tracesDf = tracesGroupedDf[[activity_col, resource_col]+time_features]
+    else:
+        tracesDf = tracesGroupedDf[[activity_col]+time_features]
+
+    tracesInput = []
+    validInput = []
+    tracesOutput = []
+    validOutput = []
+    #Every case will generate as many traces as events it has
+    for _, row in tracesDf.iterrows():
+        #2 is the minimum length of a trace
+        for i in range(1,len(row[0])+1):
+            tracesInput.append(list(map(lambda x : x[:i], row)))
+            #tracesInput.append(row[0][:i])
+            validInput.append(i)
+            tracesOutput.append(row[0][i:])
+            #tracesOutput.append(row[0][i:i+window_size])
+            validOutput.append(len(row[0])-i+1)
+
+    #We pad the traces so they all have the same length
+    tracesInput = [[trace+[0]*(max_length_trace-len(trace)) for trace in sample] for sample in tracesInput]
+    #We pad the traces so they all have the same length
+    tracesOutput = [trace+[num_activities+2]*(max_length_trace-len(trace)) for trace in tracesOutput]
+    #We return the input, output and its corresponding valid lengths
+    return tracesInput, validInput, tracesOutput, validOutput
+
 def __load_dataset_time_resource_log(filename, timestamp_col, case_id_col, activity_col, resource_col):
     #Format of the datetime
     format_timestamp = '%Y-%m-%dT%H:%M:%S.%f'
@@ -461,6 +492,64 @@ def load_dataset_seq_seq_time_resource_fold_csv(dataset, num_folds):
         X_val, X_val_valid_len, Y_val, Y_val_valid_len = __vectorize_fold_seq_seq_time_resouce(df_val, num_activities, dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'], dataset_config['max_length_trace'], time_features)
         print('Vectorize test set-----')
         X_test, X_test_valid_len, Y_test, Y_test_valid_len = __vectorize_fold_seq_seq_time_resouce(df_test, num_activities, dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'],  dataset_config['max_length_trace'], time_features)
+        #We create the dataset with the traces
+        train_dataset = TracesDatasetSeqTime(X_train, X_train_valid_len, Y_train, Y_train_valid_len)
+        val_dataset = TracesDatasetSeqTime(X_val, X_val_valid_len, Y_val, Y_val_valid_len)
+        test_dataset = TracesDatasetSeqTime(X_test, X_test_valid_len, Y_test, Y_test_valid_len)
+        #We append the datasets to the different folds
+        train_dataset_fold.append(train_dataset)
+        val_dataset_fold.append(val_dataset)
+        test_dataset_fold.append(test_dataset)
+        #We return the datasets
+    return train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold, num_resources_fold
+
+def load_dataset_seq_seq_time_resource_fold_csv_prepadding(dataset, num_folds):
+    dataset_config = __load_dataset_dict_simple_resource_fold(dataset)
+    #Datasets with different splits
+    train_dataset_fold, val_dataset_fold, test_dataset_fold = [], [], []
+    #Num activities in each fold
+    num_activities_fold = []
+    #Num resources in each fold
+    num_resources_fold = []
+    for i in range(num_folds):  
+        #We load the dataset including time features
+        fold_train = __load_dataset_time_resource_log('data/train_fold'+str(i)+'_variation0_'+dataset_config['eventlog'], dataset_config['timestamp_col'], dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'])
+        fold_val = __load_dataset_time_resource_log('data/val_fold'+str(i)+'_variation0_'+dataset_config['eventlog'], dataset_config['timestamp_col'], dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'])
+        fold_test = __load_dataset_time_resource_log('data/test_fold'+str(i)+'_variation0_'+dataset_config['eventlog'], dataset_config['timestamp_col'], dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'])
+        #The following features will be associated to timestamp data
+        time_features = ['timesincemidnight','month','weekday','hour','timesincelastevent','timesincecasestart']    
+        #We label encode the activities
+        print('Encode categorical features------')
+        categorical_columns = [dataset_config["activity_col"]]
+
+        # TODO: technically, we should open the dataset and inspect the columns
+        if dataset != "SEPSIS" and dataset != "nasa":
+            categorical_columns.append(dataset_config["resource_col"])
+        df_train, df_val, df_test, num_categories = __label_encode_column_list(fold_train, fold_val, fold_test, categorical_columns)
+        #We add to the configuration the number of activities
+        num_activities = num_categories[0]
+        num_activities_fold.append(num_activities)
+
+        # TODO: technically, we should open the dataset and inspect the columns
+        if dataset != "SEPSIS" and dataset != "nasa":
+            num_resources_fold.append(num_categories[1])
+
+        #print(num_activities)
+        #We label encode the resources
+        #df_train, df_val, df_test, num_resources = __label_encode_column(df_train, df_val, df_test, )
+        #Normalize numerical features
+        #print(num_resources)
+        print('Normalize numerical features------')
+        df_train, df_val, df_test = __normalize_numerical_features(df_train, df_val, df_test)
+        
+        #We vectorize our sets
+        print('Vectorize training set-----')
+        X_train, X_train_valid_len, Y_train, Y_train_valid_len =__vectorize_fold_seq_seq_time_resouce_prepadding(df_train, num_activities, dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'], dataset_config['max_length_trace'], time_features)
+        #print(X_train[2])
+        print('Vectorize validation set-----')
+        X_val, X_val_valid_len, Y_val, Y_val_valid_len = __vectorize_fold_seq_seq_time_resouce_prepadding(df_val, num_activities, dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'], dataset_config['max_length_trace'], time_features)
+        print('Vectorize test set-----')
+        X_test, X_test_valid_len, Y_test, Y_test_valid_len = __vectorize_fold_seq_seq_time_resouce_prepadding(df_test, num_activities, dataset_config['case_id_col'], dataset_config['activity_col'], dataset_config['resource_col'],  dataset_config['max_length_trace'], time_features)
         #We create the dataset with the traces
         train_dataset = TracesDatasetSeqTime(X_train, X_train_valid_len, Y_train, Y_train_valid_len)
         val_dataset = TracesDatasetSeqTime(X_val, X_val_valid_len, Y_val, Y_val_valid_len)

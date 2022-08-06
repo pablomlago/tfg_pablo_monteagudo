@@ -4,11 +4,11 @@ import pandas as pd
 import pickle
 
 from torch.utils.data import DataLoader
-from data_loader.data_loader import load_dataset_seq_seq_time_fold_csv, load_dataset_seq_seq_time_resource_fold_csv
+from data_loader.data_loader import load_dataset_seq_seq_time_fold_csv, load_dataset_seq_seq_time_resource_fold_csv, load_dataset_seq_seq_time_resource_fold_csv_prepadding
 
 from model.model import Seq2SeqAttentionDecoderNoPositional, Seq2SeqDecoder, Seq2SeqEncoderPositional, Seq2SeqAttentionDecoderPositional, Seq2SeqEncoderPositionalResource, Seq2SeqEncoderResourceNoPositional, Seq2SeqMultiHeadAttentionDecoderNoPositional
 from predicter.predicter import batched_beam_decode, batched_beam_decode_optimized, predict_seq2seq
-from trainer.trainer import train_seq2seq_mixed
+from trainer.trainer import train_seq2seq_mixed, train_seq2seq_mixed_prepadding
 from model.metric import levenshtein_similarity
 
 from pathlib import Path
@@ -28,7 +28,7 @@ parser.add_argument("--num_heads", type=int, default=1)
 # With "action=store_true", we do not need an argument for the flag
 parser.add_argument("--train", action="store_true")
 # With choices we can select the type of postprocessing technique to apply
-parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_monteagudo", "argmax", "random"])
+parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized","beam_length_normalized_coverage", "beam_monteagudo", "argmax", "random"])
 parser.add_argument("--disable_attention", required=False, action="store_true")
 parser.add_argument("--optimize_beam_width", required=False, action="store_true")
 parser.add_argument("--store_prefixes_in_results", required=False, action="store_true")
@@ -49,7 +49,7 @@ else:
     execution_name = f'results_no_attention/{dataset}_{args.execution_id}_{args.num_epochs}'
 
 #train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold = load_dataset_seq_seq_time_fold_csv(dataset, num_folds)
-train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold, num_resources_fold = load_dataset_seq_seq_time_resource_fold_csv(dataset, num_folds)
+train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold, num_resources_fold = load_dataset_seq_seq_time_resource_fold_csv_prepadding(dataset, num_folds)
 
 max_length_trace = dataset_config['max_length_trace']
 embed_size, num_hiddens, num_layers, dropout = 32, 32, 2, 0.1
@@ -90,7 +90,7 @@ if args.disable_attention:
     name = "disable_attention_" + name
 if train_required:
     print("Training...")
-    losses = train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name)
+    losses = train_seq2seq_mixed_prepadding(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name)
     result = pd.DataFrame(columns=['epoch','loss'])
     for epoch, loss in losses:
         result = result.append({'epoch': epoch, 'loss': loss[0]}, ignore_index=True)
