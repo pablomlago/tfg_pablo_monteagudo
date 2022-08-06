@@ -3,6 +3,7 @@ from torch import nn
 from d2l import torch as d2l
 import matplotlib.pyplot as plt
 
+
 from model.loss import SoftmaxCELoss
 
 import os

@@ -1,6 +1,7 @@
 import argparse
 from d2l import torch as d2l
 import pandas as pd
+import pickle
 
 from torch.utils.data import DataLoader
 from data_loader.data_loader import load_dataset_seq_seq_time_fold_csv, load_dataset_seq_seq_time_resource_fold_csv
@@ -137,10 +138,12 @@ if args.optimize_beam_width:
 
 print("Testing...")
 if "beam" in postprocessing_type:
-    predictions = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, not args.disable_attention, postprocessing_type=postprocessing_type)
+    predictions, attention_weights = batched_beam_decode_optimized(net, test_iter, num_steps, beam_width, num_activities+2, device, name, not args.disable_attention, postprocessing_type=postprocessing_type)
 else:
     predictions = predict_seq2seq(net, test_iter, num_steps, device, name, not args.disable_attention, batch_size, postprocessing_strategy=postprocessing_type)
 
+if "beam" in postprocessing_type and not args.disable_attention:
+    pickle.dump(attention_weights, open(execution_name+'_fold_'+str(i)+"_attention_weights", 'wb'))
 
 if not args.store_prefixes_in_results:
     result = pd.DataFrame(columns=['prediction','truth','similarity'])

@@ -108,7 +108,7 @@ def batched_beam_decode(net, data_iter, num_steps, beam_size, eot_token,
     return preds
 
 
-class BeamSearchNodeOptimized(object):
+"""class BeamSearchNodeOptimized(object):
     def __init__(self, dec_state, previous_node, dec_X, log_prob, length, eot_found):
         self.dec_state = dec_state
         self.previous_node = previous_node
@@ -116,6 +116,34 @@ class BeamSearchNodeOptimized(object):
         self.log_prob = log_prob
         self.length = length
         self.eot_found = eot_found
+
+    def eval(self, beam_type, alpha=0.65):
+        reward = 0
+        if beam_type == "beam":
+            return self.log_prob
+        elif beam_type == "beam_length_normalized":
+            # Following https://arxiv.org/pdf/1609.08144.pdf is not a product but a division (log(P(Y|X))/lp(Y))
+            return self.log_prob / (math.pow(5 + self.length, alpha) / math.pow(5 + 1, alpha))
+        elif beam_type == "beam_monteagudo":
+            return self.log_prob * (math.pow(5 + self.length, alpha) / math.pow(5 + 1, alpha))
+        else:
+            raise ValueError("Unknown beam type")
+
+    def __lt__(self, other):
+        return self.length < other.length
+
+    def __le__(self, other):
+        return self.length < other.length"""
+
+class BeamSearchNodeOptimized(object):
+    def __init__(self, dec_state, previous_node, dec_X, log_prob, length, eot_found, attention_weights):
+        self.dec_state = dec_state
+        self.previous_node = previous_node
+        self.dec_X = dec_X
+        self.log_prob = log_prob
+        self.length = length
+        self.eot_found = eot_found
+        self.attention_weights = attention_weights
 
     def eval(self, beam_type, alpha=0.65):
         reward = 0
@@ -154,7 +182,7 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
     """Predict for sequence to sequence."""
     # We load the best model parameters
     if attention_enabled:
-        net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt')))
+        net.load_state_dict(torch.load(os.path.join("./results_attention/models", name + '_best-model-parameters.pt'), map_location ='cpu'))
     else:
         net.load_state_dict(
             torch.load(os.path.join("./results_no_attention/models", name + '_best-model-parameters.pt')))
@@ -162,8 +190,11 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
     net.eval()
     # We get predictions for each batch
     preds = []
+    # We get attention scores
+    attention_scores = []
     for batch in data_iter:
         batch_pred = []
+        batch_attention_scores = []
         batched_enc_X, batched_enc_valid_len, _, _ = [x.to(device) for x in batch]
         for (enc_X, enc_valid_len) in zip(batched_enc_X, batched_enc_valid_len):
             enc_X = enc_X.unsqueeze(0)
@@ -174,7 +205,7 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
             # We prepare the first output for the decoder
             dec_X = torch.unsqueeze(enc_X[:, -1, 0], 1)
             # Starting node
-            initial_node = BeamSearchNodeOptimized(dec_state, None, dec_X, 0, 0, False)
+            initial_node = BeamSearchNodeOptimized(dec_state, None, dec_X, 0, 0, False, None)
 
             open_nodes = PriorityQueue()
             end_nodes = []
@@ -204,9 +235,15 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
                     current_value = values[0][0][j].item()
                     new_length = current_node.length + (
                         1 if not current_node.eot_found and current_idx != eot_token else 0)
-                    node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
-                                                   current_node.log_prob + log(current_value), new_length,
-                                                   current_node.eot_found or current_idx == eot_token)
+
+                    if attention_enabled:
+                        node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
+                                                    current_node.log_prob + log(current_value), new_length,
+                                                    current_node.eot_found or current_idx == eot_token, net.decoder.attention_weights)
+                    else:
+                        node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
+                                                    current_node.log_prob + log(current_value), new_length,
+                                                    current_node.eot_found or current_idx == eot_token, None)
                     score = -node.eval(postprocessing_type)
                     open_nodes.put((score, node))
 
@@ -215,12 +252,16 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
             # We prepare an aditional variable for storing the results
             current_pred = []
             _, best_node = sorted(end_nodes, key=operator.itemgetter(0))[0]
+            attention_weights = []
             while best_node.previous_node is not None:
+                if attention_enabled:
+                    attention_weights.append(best_node.attention_weights[0][0,0,:].tolist())
                 current_pred = [best_node.dec_X.item()] + current_pred
                 best_node = best_node.previous_node
             batch_pred.append(current_pred + [eot_token] * (num_steps - len(current_pred)))
+            attention_scores.append(attention_weights)
         preds.append(torch.Tensor(batch_pred).to(torch.int))
-    return preds
+    return preds, attention_scores
 
 
 def predict_seq2seq(net, data_iter, num_steps,
