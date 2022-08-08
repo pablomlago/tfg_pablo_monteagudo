@@ -18,7 +18,7 @@ while [[ "$#" -gt 0 ]]; do case $1 in
   esac
 done
 
-command="$PYTHON abasp prepadding.py --dataset $dataset --execution_id $execution_id --num_epochs 150 --num_folds 5 --fold_num $fold_num --postprocessing $postprocessing"
+command="$PYTHON abasp_prepadding.py --dataset $dataset --execution_id $execution_id --num_epochs 150 --num_folds 5 --fold_num $fold_num --postprocessing $postprocessing"
 if [ "$disable_attention" == "--disable_attention" ]; then
   command="$command --disable_attention"
 fi
