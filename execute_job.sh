@@ -3,7 +3,7 @@
 #SBATCH -c 32
 #SBATCH --mem=32G
 #SBATCH --time=72:00:00
-PYTHON=/mnt/netapp2/Store_uni/home/usc/ci/jva/miniconda3/envs/abasp/bin/python3.9
+PYTHON=/mnt/netapp2/Store_uni/home/usc/ci/erm/miniconda3/envs/abasp/bin/python3.9
 
 while [[ "$#" -gt 0 ]]; do case $1 in
     -d|--dataset) dataset="$2"; shift; shift ;;
@@ -18,7 +18,7 @@ while [[ "$#" -gt 0 ]]; do case $1 in
   esac
 done
 
-command="$PYTHON abasp.py --dataset $dataset --execution_id $execution_id --num_epochs 150 --num_folds 5 --fold_num $fold_num --postprocessing $postprocessing"
+command="$PYTHON abasp prepadding.py --dataset $dataset --execution_id $execution_id --num_epochs 150 --num_folds 5 --fold_num $fold_num --postprocessing $postprocessing"
 if [ "$disable_attention" == "--disable_attention" ]; then
   command="$command --disable_attention"
 fi
