@@ -25,7 +25,7 @@ parser.add_argument("--num_folds", type=int, required=True)
 parser.add_argument("--fold_num", type=int, required=True)
 # With "action=store_true", we do not need an argument for the flag
 parser.add_argument("--train", action="store_true")
-parser.add_argument("--bidirectional", type=bool, required=False, default=False)
+parser.add_argument("--bidirectional", required=False, action="store_true")
 # With choices we can select the type of postprocessing technique to apply
 parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_monteagudo", "argmax", "random"])
 parser.add_argument("--disable_attention", required=False, action="store_true")
@@ -45,6 +45,9 @@ if not args.disable_attention:
     execution_name = f'results_attention/{dataset}_{args.execution_id}_{args.num_epochs}'
 else:
     execution_name = f'results_no_attention/{dataset}_{args.execution_id}_{args.num_epochs}'
+
+if args.bidirectional:
+    execution_name = execution_name + "_bidirectional"
 
 #train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold = load_dataset_seq_seq_time_fold_csv(dataset, num_folds)
 train_dataset_fold, val_dataset_fold, test_dataset_fold, dataset_config, num_activities_fold, num_resources_fold = load_dataset_seq_seq_time_resource_fold_csv_prepadding(dataset, num_folds)
@@ -91,9 +94,11 @@ net = d2l.EncoderDecoder(encoder, decoder)
 name = dataset + "_fold_" + str(i)
 if args.disable_attention:
     name = "disable_attention_" + name
+if args.bidirectional:
+    name = "bidirectional_" + name
 if train_required:
     print("Training...")
-    losses = train_seq2seq_mixed_prepadding(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name)
+    losses = train_seq2seq_mixed_prepadding(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name, args.disable_attention)
     result = pd.DataFrame(columns=['epoch','loss'])
     for epoch, loss in losses:
         result = result.append({'epoch': epoch, 'loss': loss[0]}, ignore_index=True)

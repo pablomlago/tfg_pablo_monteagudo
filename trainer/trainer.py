@@ -64,7 +64,7 @@ def train_seq2seq_mixed(execution_name, net, train_iter, val_iter, lr, num_epoch
 
     return losses
 
-def train_seq2seq_mixed_prepadding(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name):
+def train_seq2seq_mixed_prepadding(execution_name, net, train_iter, val_iter, lr, num_epochs, device, name, disable_attention):
     """Train a model for sequence to sequence."""
     def xavier_init_weights(m):
         if type(m) == nn.Linear:
@@ -111,7 +111,10 @@ def train_seq2seq_mixed_prepadding(execution_name, net, train_iter, val_iter, lr
                 with torch.no_grad():
                     current_loss += loss(Y_hat, Y).sum()
             if (current_loss < best_model_loss):
-                torch.save(net.state_dict(), os.path.join("./results/models/", name + '_best-model-parameters.pt'))
+                if disable_attention:
+                    torch.save(net.state_dict(), os.path.join("./results_no_attention/models/", name + '_best-model-parameters.pt'))
+                else:
+                    torch.save(net.state_dict(), os.path.join("./results_attention/models/", name + '_best-model-parameters.pt'))
             if (epoch + 1) % 10 == 0:
                 losses.append((epoch+1, (metric[0] / metric[1],)))
                 #animator.add(epoch + 1, (metric[0] / metric[1],))
