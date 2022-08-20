@@ -109,21 +109,25 @@ def batched_beam_decode(net, data_iter, num_steps, beam_size, eot_token,
 
 
 class BeamSearchNodeOptimized(object):
-    def __init__(self, dec_state, previous_node, dec_X, log_prob, length, eot_found):
+    def __init__(self, dec_state, previous_node, dec_X, log_prob, length, eot_found, coverage_weights):
         self.dec_state = dec_state
         self.previous_node = previous_node
         self.dec_X = dec_X
         self.log_prob = log_prob
         self.length = length
         self.eot_found = eot_found
+        self.coverage_weights = coverage_weights
 
-    def eval(self, beam_type, alpha=0.65):
+    def eval(self, beam_type, alpha=0.65, beta=0.65):
         reward = 0
         if beam_type == "beam":
             return self.log_prob
         elif beam_type == "beam_length_normalized":
             # Following https://arxiv.org/pdf/1609.08144.pdf is not a product but a division (log(P(Y|X))/lp(Y))
             return self.log_prob / (math.pow(5 + self.length, alpha) / math.pow(5 + 1, alpha))
+        elif beam_type == "beam_length_normalized_coverage":
+            # Following https://arxiv.org/pdf/1609.08144.pdf is not a product but a division (log(P(Y|X))/lp(Y))
+            return self.log_prob / (math.pow(5 + self.length, alpha) / math.pow(5 + 1, alpha)) + beta*sum([log(weight) for weight in self.coverage_weights])
         elif beam_type == "beam_monteagudo":
             return self.log_prob * (math.pow(5 + self.length, alpha) / math.pow(5 + 1, alpha))
         else:
@@ -134,7 +138,6 @@ class BeamSearchNodeOptimized(object):
 
     def __le__(self, other):
         return self.length < other.length
-
 
 def setup_reproducibility():
     # Set seeds for reproducibility
@@ -204,9 +207,14 @@ def batched_beam_decode_optimized(net, data_iter, num_steps, beam_size, eot_toke
                     current_value = values[0][0][j].item()
                     new_length = current_node.length + (
                         1 if not current_node.eot_found and current_idx != eot_token else 0)
-                    node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
-                                                   current_node.log_prob + log(current_value), new_length,
-                                                   current_node.eot_found or current_idx == eot_token)
+                    if attention_enabled:
+                        node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
+                                                    current_node.log_prob + log(current_value), new_length,
+                                                    current_node.eot_found or current_idx == eot_token, None)
+                    else:
+                        node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
+                                                    current_node.log_prob + log(current_value), new_length,
+                                                    current_node.eot_found or current_idx == eot_token, None)
                     score = -node.eval(postprocessing_type)
                     open_nodes.put((score, node))
 
@@ -236,6 +244,8 @@ def batched_beam_decode_optimized_prepadding(net, data_iter, num_steps, beam_siz
     net.eval()
     # We get predictions for each batch
     preds = []
+    #Small-value for initialization
+    epsilon = 0.0001
     for batch in data_iter:
         batch_pred = []
         batched_enc_X, batched_enc_valid_len, _, _ = [x.to(device) for x in batch]
@@ -248,7 +258,7 @@ def batched_beam_decode_optimized_prepadding(net, data_iter, num_steps, beam_siz
             # We prepare the first output for the decoder
             dec_X = enc_X[:,:,0].gather(1,enc_valid_len.view(-1,1)-1)
             # Starting node
-            initial_node = BeamSearchNodeOptimized(dec_state, None, dec_X, 0, 0, False)
+            initial_node = BeamSearchNodeOptimized(dec_state, None, dec_X, 0, 0, False, [epsilon]*enc_valid_len)
 
             open_nodes = PriorityQueue()
             end_nodes = []
@@ -278,9 +288,17 @@ def batched_beam_decode_optimized_prepadding(net, data_iter, num_steps, beam_siz
                     current_value = values[0][0][j].item()
                     new_length = current_node.length + (
                         1 if not current_node.eot_found and current_idx != eot_token else 0)
-                    node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
-                                                   current_node.log_prob + log(current_value), new_length,
-                                                   current_node.eot_found or current_idx == eot_token)
+                    if attention_enabled:
+                        attention_weights = net.decoder.attention_weights[0].squeeze()
+                        coverage_weights = current_node.coverage_weights
+                        coverage_weights = [min(1.0, coverage_weights[i]+attention_weights[i])for i in range(enc_valid_len)]
+                        node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
+                                                    current_node.log_prob + log(current_value), new_length,
+                                                    current_node.eot_found or current_idx == eot_token, coverage_weights)
+                    else:
+                        node = BeamSearchNodeOptimized(dec_state, current_node, current_idx,
+                                                    current_node.log_prob + log(current_value), new_length,
+                                                    current_node.eot_found or current_idx == eot_token, None)
                     score = -node.eval(postprocessing_type)
                     open_nodes.put((score, node))
 

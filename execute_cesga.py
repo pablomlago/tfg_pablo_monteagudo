@@ -3,7 +3,7 @@ import os
 
 parser = argparse.ArgumentParser(description="Prepare to execute in CESGA")
 parser.add_argument("--train", action="store_true")
-parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_monteagudo", "argmax", "random"])
+parser.add_argument("--postprocessing", type=str, required=True, choices=["beam", "beam_length_normalized", "beam_length_normalized_coverage", "beam_monteagudo", "argmax", "random"])
 parser.add_argument("--disable_attention", required=False, action="store_true")
 parser.add_argument("--optimize_beam_width", required=False, action="store_true")
 parser.add_argument("--store_prefixes_in_results", required=False, action="store_true")
